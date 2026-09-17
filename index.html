@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <title>かんたん送信</title>
+
+  <!-- iPhone：ホーム画面のアイコンと、アドレス欄なしで開く設定 -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="かんたん送信">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#1565c0">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+
+  <style>
+    html, body { margin: 0; height: 100%; background: #f4f7fb; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+      padding-top: env(safe-area-inset-top);
+      box-sizing: border-box;
+    }
+    #app { display: block; width: 100%; height: 100%; border: 0; }
+    #loading {
+      position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 16px; color: #0d47a1; font-size: 20px; font-weight: 700; background: #f4f7fb;
+    }
+    #loading::before {
+      content: ""; width: 56px; height: 56px; border-radius: 50%;
+      border: 6px solid #e3f2fd; border-top-color: #1565c0; animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="loading">読み込んでいます</div>
+  <iframe id="app" title="紙帳票かんたん送信" allow="camera; clipboard-write" hidden></iframe>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // ===== 設定：Apps Script のウェブアプリの URL（…/exec）に書き換える =====
+      // この URL は秘密ではありません。送信者ごとの鍵がなければ送信できません。
+      var WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxv-G-cmkt6FqtLiJEAMImiEnz_pptKnwKAp2c1HOTVZcOfyHo5cQFMUYjQ9Xku3lc/exec';
+      // =====================================================================
+
+      var STORAGE_KEY = 'kantan-soushin-key';
+      var KEY_PATTERN = /^[a-f0-9]{64}$/;
+
+      function storageGet() {
+        try { return localStorage.getItem(STORAGE_KEY) || ''; } catch (e) { return ''; }
+      }
+      function storageSet(value) {
+        try { localStorage.setItem(STORAGE_KEY, value); } catch (e) { /* 保存できない環境でもURLの鍵で動く */ }
+      }
+
+      // 個人用URL（…/#k=鍵）の鍵を使う。URLに鍵がない起動（Androidのアプリとして追加した場合など）は、
+      // 前回このページで使った鍵を使う。
+      var match = location.hash.match(/(?:^#|&)k=([a-f0-9]{64})(?:&|$)/);
+      var key = match ? match[1] : storageGet();
+      if (match) storageSet(key);
+
+      // Android（Chrome）だけ、アプリとして追加するための設定を読み込む。
+      // iPhone では読み込まない（iPhone はホーム画面に追加したときの URL に鍵がそのまま残るため）。
+      var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      if (!isIOS) {
+        var link = document.createElement('link');
+        link.rel = 'manifest';
+        link.href = 'manifest.webmanifest';
+        document.head.appendChild(link);
+      }
+
+      var frame = document.getElementById('app');
+      frame.addEventListener('load', function () {
+        document.getElementById('loading').hidden = true;
+        frame.hidden = false;
+      });
+      frame.src = WEBAPP_URL + (KEY_PATTERN.test(key) ? '#k=' + key : '');
+    })();
+  </script>
+</body>
+</html>
