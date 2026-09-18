@@ -24,49 +24,66 @@
       box-sizing: border-box;
     }
     #app { display: block; width: 100%; height: 100%; border: 0; }
-    #loading {
+    #message {
       position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 16px; color: #0d47a1; font-size: 20px; font-weight: 700; background: #f4f7fb;
+      gap: 16px; padding: 24px; text-align: center; color: #0d47a1; font-size: 20px; font-weight: 700; background: #f4f7fb;
     }
-    #loading::before {
+    #message.loading::before {
       content: ""; width: 56px; height: 56px; border-radius: 50%;
       border: 6px solid #e3f2fd; border-top-color: #1565c0; animation: spin 0.9s linear infinite;
     }
+    #message.error { color: #c62828; }
     @keyframes spin { to { transform: rotate(360deg); } }
     [hidden] { display: none !important; }
   </style>
 </head>
 <body>
-  <div id="loading">読み込んでいます</div>
+  <div id="message" class="loading">読み込んでいます</div>
   <iframe id="app" title="紙帳票かんたん送信" allow="camera; clipboard-write" hidden></iframe>
 
   <script>
     (function () {
       'use strict';
 
-      // ===== 設定：Apps Script のウェブアプリの URL（…/exec）に書き換える =====
-      // この URL は秘密ではありません。送信者ごとの鍵がなければ送信できません。
-      var WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxv-G-cmkt6FqtLiJEAMImiEnz_pptKnwKAp2c1HOTVZcOfyHo5cQFMUYjQ9Xku3lc/exec';
-      // =====================================================================
+      // ===== 設定 =====
+      // この会社だけで使う場合は、下の '' を Apps Script のウェブアプリURL（…/exec）に書き換えます。
+      // 複数の会社で1つの入口ページを共用する場合は、'' のままにします。
+      // （その場合、各社のURL「…/#a=送信画面の番号&k=個人の鍵」から送信画面を決めます）
+      var DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxv-G-cmkt6FqtLiJEAMImiEnz_pptKnwKAp2c1HOTVZcOfyHo5cQFMUYjQ9Xku3lc/exec';
+      // ================
 
-      var STORAGE_KEY = 'kantan-soushin-key';
+      var STORAGE_KEY = 'kantan-soushin';
       var KEY_PATTERN = /^[a-f0-9]{64}$/;
+      var APP_PATTERN = /^[A-Za-z0-9_-]{20,120}$/;
 
-      function storageGet() {
-        try { return localStorage.getItem(STORAGE_KEY) || ''; } catch (e) { return ''; }
+      function load() {
+        try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch (e) { return {}; }
       }
-      function storageSet(value) {
-        try { localStorage.setItem(STORAGE_KEY, value); } catch (e) { /* 保存できない環境でもURLの鍵で動く */ }
+      function save(value) {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(value)); } catch (e) { /* 保存できなくてもURLの鍵で動く */ }
       }
 
-      // 個人用URL（…/#k=鍵）の鍵を使う。URLに鍵がない起動（Androidのアプリとして追加した場合など）は、
-      // 前回このページで使った鍵を使う。
-      var match = location.hash.match(/(?:^#|&)k=([a-f0-9]{64})(?:&|$)/);
-      var key = match ? match[1] : storageGet();
-      if (match) storageSet(key);
+      // 個人用URL（…/#a=送信画面の番号&k=個人の鍵）から読み取る。
+      // URLに無い場合（Androidでアプリとして追加した起動など）は、前回このページで使った値を使う。
+      var hash = location.hash.replace(/^#/, '');
+      var keyFromUrl = (hash.match(/(?:^|&)k=([a-f0-9]{64})(?:&|$)/) || [])[1] || '';
+      var appFromUrl = (hash.match(/(?:^|&)a=([A-Za-z0-9_-]{20,120})(?:&|$)/) || [])[1] || '';
+      var saved = load();
+      var key = KEY_PATTERN.test(keyFromUrl) ? keyFromUrl : (saved.key || '');
+      var appId = APP_PATTERN.test(appFromUrl) ? appFromUrl : (saved.appId || '');
+      if (keyFromUrl || appFromUrl) save({ key: key, appId: appId });
+
+      // 送信画面のURLを決める（script.google.com の形だけを受け付ける）
+      var webappUrl = appId ? 'https://script.google.com/macros/s/' + appId + '/exec' : DEFAULT_WEBAPP_URL;
+      var message = document.getElementById('message');
+      if (!/^https:\/\/script\.google\.com\/(a\/macros\/[^/]+|macros)\/s\/[A-Za-z0-9_-]+\/exec$/.test(webappUrl)) {
+        message.className = 'error';
+        message.textContent = '担当者から受け取ったURLから開いてください。';
+        return;
+      }
 
       // Android（Chrome）だけ、アプリとして追加するための設定を読み込む。
-      // iPhone では読み込まない（iPhone はホーム画面に追加したときの URL に鍵がそのまま残るため）。
+      // iPhone では読み込まない（ホーム画面に追加したときのURLに鍵がそのまま残るため）。
       var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
       if (!isIOS) {
@@ -78,10 +95,10 @@
 
       var frame = document.getElementById('app');
       frame.addEventListener('load', function () {
-        document.getElementById('loading').hidden = true;
+        message.hidden = true;
         frame.hidden = false;
       });
-      frame.src = WEBAPP_URL + (KEY_PATTERN.test(key) ? '#k=' + key : '');
+      frame.src = webappUrl + (KEY_PATTERN.test(key) ? '#k=' + key : '');
     })();
   </script>
 </body>
