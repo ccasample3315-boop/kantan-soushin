@@ -99,6 +99,16 @@
         document.head.appendChild(link);
       }
 
+      // 送信画面で「引っぱって更新」をしたとき、このページごと読み込み直す。
+      // 受け付けるのは Google の送信画面からの決まった合図だけ。
+      window.addEventListener('message', function (e) {
+        if (e.data !== 'kantan-soushin:reload') return;
+        var fromGoogle = e.origin === 'https://script.google.com' ||
+          /^https:\/\/([a-z0-9-]+\.)*googleusercontent\.com$/.test(e.origin);
+        if (!fromGoogle) return;
+        location.reload();
+      });
+
       var frame = document.getElementById('app');
       frame.addEventListener('load', function () {
         message.hidden = true;
